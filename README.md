@@ -1,5 +1,7 @@
 # TreeHouseDataCollection_modified
+
 This is a modified version of the voice-recorder-app to make user-friendly live testing of all the upcoming versions of voice recognition models. To setup first, make sure to install the previous whisper models. To update the voice recognition model, refer to the report for detailed instructions on how to update the code.
+
 ---
 
 ## Prerequisites
@@ -75,22 +77,23 @@ npm start
 
 ```
 voice-to-text-app/
-├── public/                 # Static files
-├── server/                 # Backend server code
-│   └── index.js            # Express server with upload + predict endpoint
-├── src/                    # Frontend source code
-│   ├── components/         # React components
-│   │   ├── Home.js         # Landing page with student ID input
-│   │   ├── RecordingScreen.js  # Recording + prediction display
-│   │   └── CompletionScreen.js # Session complete screen
-│   ├── services/           # API services
-│   │   └── recordingService.js # Upload and predict API calls
-│   ├── App.js              # Main application component
-│   └── index.js            # Application entry point
-├── predict.py              # Python script that runs Whisper inference
-├── uploads/                # Saved audio recordings (auto-created)
-├── package.json            # Project dependencies and scripts
-└── README.md               # This file
+├── public/                       # Static files
+├── server/                       # Backend server code
+│   └── index.js                  # Express server with upload, predict, and model management endpoints
+├── src/                          # Frontend source code
+│   ├── components/               # React components
+│   │   ├── Home.js               # Landing page with student ID input
+│   │   ├── RecordingScreen.js    # Recording + prediction display
+│   │   ├── ModelManager.js       # Model switching, comparison, and history panel
+│   │   └── CompletionScreen.js   # Session complete screen
+│   ├── services/                 # API services
+│   │   └── recordingService.js   # All API calls including model management
+│   ├── App.js                    # Main application component
+│   └── index.js                  # Application entry point
+├── predict.py                    # Python script that runs Whisper inference
+├── uploads/                      # Saved audio recordings (auto-created)
+├── package.json                  # Project dependencies and scripts
+└── README.md                     # This file
 ```
 
 ---
@@ -104,8 +107,11 @@ voice-to-text-app/
 
 ### Recording Screen
 - The current letter or word to say is displayed prominently
+- The **Model Testing Panel** sits above the recording area with two tabs:
+  - **Models** — view, switch, add, and remove model versions
+  - **History** — see a log of all predictions with accuracy per model
 - Click the **microphone button** to start recording (auto-stops after 5 seconds)
-- After recording, the app sends the audio to the Whisper model and displays:
+- After recording, the app displays:
   - A **green box** if the model correctly recognised what was said
   - A **red box** if the model heard something different
 - Click **Redo Previous** to go back and re-record the previous item
@@ -117,6 +123,44 @@ voice-to-text-app/
 
 ---
 
+## Model Testing Features
+
+### Switching Models
+In the **Models** tab of the Model Testing Panel:
+- The currently active model is highlighted with an **ACTIVE** badge
+- Click the swap icon next to any model to switch to it instantly — no restart needed
+- Accuracy percentages are shown per model based on session history
+
+### Adding a New Model Version
+1. Click **Add New Model Version** in the Models tab
+2. Enter a name (e.g. `whisper-kids-v2`) and the full path to the model folder on your Mac, or a HuggingFace model ID (e.g. `openai/whisper-tiny`)
+3. Click **Add Model** — it appears in the list immediately
+
+### Comparison Mode
+1. Click the **Compare** button in the Model Testing Panel header
+2. Assign **Model A** and **Model B** by clicking the A/B buttons next to each model
+3. Record as normal — both models will analyse the same audio simultaneously
+4. Results are shown side by side with correct/incorrect indicators for each model
+
+### Prediction History
+- The **History** tab shows a running log of all predictions in the current session
+- Each entry shows: expected label, what the model heard, correct/incorrect, model name, and timestamp
+- Accuracy percentages are calculated automatically per model
+- Click **Clear History** to reset the log
+
+---
+
+## Built-in Models
+
+Two models are included by default:
+
+| Model | Description |
+|---|---|
+| `whisper-singaporean-kids (Fine-tuned)` | Custom trained model on Singaporean children's voices |
+| `openai/whisper-tiny (Base)` | The original base Whisper model — useful as a baseline comparison |
+
+---
+
 ## File Naming Convention
 
 Recordings are saved in the `uploads/` folder with this pattern:
@@ -124,7 +168,9 @@ Recordings are saved in the `uploads/` folder with this pattern:
 ```
 {studentId}_{runNumber}{letterOrWord}.webm
 ```
-If sucessful detection of recording by the model, another file is saved with the same pattern:
+
+If successful detection of recording by the model, another file is saved with the same pattern:
+
 ```
 {studentId}_{runNumber}{letterOrWord}.wav
 ```
@@ -140,14 +186,17 @@ Successful recognition will upload the below file:
 ```
 001_1A.wav
 ```
+
 ---
 
 ## Configuration
 
-The model directory and Python path can be customised via environment variables in `server/index.js`:
+The model directory and Python path can be customised in `server/index.js`:
 
 ```
 WHISPER_MODEL_DIR   Path to your whisper_cmd_az folder (default: ~/Downloads/whisper_cmd_az)
 PYTHON_CMD          Python executable to use (default: /opt/anaconda3/bin/python3)
 PREDICT_SCRIPT      Path to predict.py (default: project root)
 ```
+
+---
