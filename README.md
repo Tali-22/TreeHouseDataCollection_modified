@@ -29,7 +29,7 @@ pip install transformers
 
 ```bash
 git clone https://github.com/Tali-22/TreeHouseDataCollection_modified.git
-cd TreeHouseDataCollection_modified/voice-to-text-app
+cd "/Users/**YOUR USER**/TreeHouseDataCollection_modified/voice-to-text-app"
 ```
 
 ### 2. Install dependencies
