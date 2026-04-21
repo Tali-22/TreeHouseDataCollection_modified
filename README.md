@@ -53,6 +53,15 @@ The folder should contain files like `config.json`, `model.safetensors`, `tokeni
 ### 4. Start the development servers
 
 ```bash
+# Terminal 1 — start model server with whichever model they want to start with
+python model_server.py /path/to/any/model_folder
+```
+This will start:
+* The model server loads one model at startup to minimise the time taken for models to process each recording in real-time
+* When you switch models in the GUI, it automatically calls /switch_model on the server to hot-swap to the new one — so you don't need to restart the server every time you switch
+
+```bash
+# Terminal 2 - Start the development server
 npm run dev
 ```
 
@@ -64,10 +73,10 @@ This will start:
 Alternatively, run them separately:
 
 ```bash
-# Terminal 1 - Start the backend server
+# Terminal 2 - Start the backend server
 npm run server
 
-# Terminal 2 - Start the frontend
+# Terminal 3 - Start the frontend
 npm start
 ```
 
