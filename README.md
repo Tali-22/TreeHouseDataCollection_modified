@@ -181,7 +181,7 @@ Example: Student ID `001` recording the letter `A`:
 001_1A.webm
 ```
 
-Successful recognition will upload the below file:
+Successful upload into training model will upload the following file:
 
 ```
 001_1A.wav
