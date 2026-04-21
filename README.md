@@ -1,6 +1,6 @@
 # TreeHouseDataCollection_modified
 
-This is a modified version of the voice-recorder-app to make user-friendly live testing of all the upcoming versions of voice recognition models. To setup first, make sure to install the previous whisper models. To update the voice recognition model, refer to the report for detailed instructions on how to update the code.
+This is a modified version of the voice-recorder-app to make user-friendly live testing of all the upcoming versions of voice recognition models. To set up first, make sure to install the previous whisper models. To use this interface and help with any initial user queries, refer to the report for detailed instructions and information.
 
 ---
 
