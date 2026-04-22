@@ -11,37 +11,44 @@ import Alert from '@mui/material/Alert';
 import Divider from '@mui/material/Divider';
 import LinearProgress from '@mui/material/LinearProgress';
 import Chip from '@mui/material/Chip';
+import Grid from '@mui/material/Grid';
 import MicIcon from '@mui/icons-material/Mic';
 import MicOffIcon from '@mui/icons-material/MicOff';
 import ReplayIcon from '@mui/icons-material/Replay';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
-import { uploadAndPredict } from '../services/recordingService';
+import { uploadAndPredict, uploadAndCompare } from '../services/recordingService';
+import ModelManager from './ModelManager';
 import Recorder from 'recorder-js';
 
-// Constants
-const RECORDING_TIME_LIMIT = 5000; // 5 seconds
+const RECORDING_TIME_LIMIT = 5000;
 
-const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progress, onRecordingSaved, onRedo, lastPrediction }) => {
+const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progress, onRecordingSaved, onRedo }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPredicting, setIsPredicting] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
-  // ✅ Local prediction result for the CURRENT recording (shown until next item)
+  // Prediction results
   const [currentPrediction, setCurrentPrediction] = useState(null);
   const [predictionReady, setPredictionReady] = useState(false);
+  const [comparisonResult, setComparisonResult] = useState(null); // for compare mode
+
+  // Model manager state
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareModelIds, setCompareModelIds] = useState({ a: 'default', b: 'base-whisper' });
 
   const [audioStream, setAudioStream] = useState(null);
   const recorderInstanceRef = useRef(null);
   const recordingTimerRef = useRef(null);
 
-  // Reset prediction display when item changes
+  // Reset prediction when item changes
   useEffect(() => {
     setCurrentPrediction(null);
     setPredictionReady(false);
+    setComparisonResult(null);
   }, [itemToRecord]);
 
   useEffect(() => {
@@ -58,10 +65,9 @@ const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progr
 
   const stopRecording = useCallback(async () => {
     if (recordingTimerRef.current) clearTimeout(recordingTimerRef.current);
-    
     const recorder = recorderInstanceRef.current;
     if (!recorder || !isRecording) return;
-    
+
     setIsProcessing(true);
     setInfo('Saving recording...');
 
@@ -70,37 +76,41 @@ const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progr
       setIsRecording(false);
       stopMicrophone();
 
-      // ✅ Now call upload-and-predict instead of plain upload
       setIsPredicting(true);
-      setInfo('Analysing with Whisper model...');
 
-      const result = await uploadAndPredict(blob, studentId, itemToRecord, currentRun);
-
-      const prediction = result.prediction;
-      setCurrentPrediction(prediction);
-      setPredictionReady(true);
-      setIsPredicting(false);
-
-      if (prediction) {
-        setInfo(`Saved! Model heard: "${prediction}"`);
+      if (compareMode) {
+        // ── COMPARISON MODE ──
+        setInfo('Running both models simultaneously...');
+        const result = await uploadAndCompare(
+          blob, studentId, itemToRecord, currentRun,
+          compareModelIds.a, compareModelIds.b
+        );
+        setComparisonResult(result);
+        setPredictionReady(true);
+        setIsPredicting(false);
+        setInfo('Comparison complete!');
+        // Advance after 3 seconds so user can read both results
+        setTimeout(() => onRecordingSaved(result?.modelA?.prediction), 3000);
       } else {
-        setInfo('Saved! (Model prediction unavailable)');
+        // ── SINGLE MODEL MODE ──
+        setInfo('Analysing with Whisper model...');
+        const result = await uploadAndPredict(blob, studentId, itemToRecord, currentRun);
+        setCurrentPrediction(result);
+        setPredictionReady(true);
+        setIsPredicting(false);
+        setInfo(result.prediction ? `Model heard: "${result.prediction}"` : 'Saved! (prediction unavailable)');
+        setTimeout(() => onRecordingSaved(result.prediction), 2000);
       }
 
-    // Wait 2 seconds so user can see the prediction before moving on
-      setTimeout(() => {
-        onRecordingSaved(prediction);
-      }, 2000);
-
     } catch (err) {
-      console.error('Error stopping/saving recording:', err);
+      console.error('Error:', err);
       setError('Failed to process or save recording.');
       stopMicrophone();
       setIsPredicting(false);
     } finally {
       setIsProcessing(false);
     }
-  }, [isRecording, studentId, itemToRecord, currentRun, onRecordingSaved, stopMicrophone]);
+  }, [isRecording, studentId, itemToRecord, currentRun, onRecordingSaved, stopMicrophone, compareMode, compareModelIds]);
 
   const startRecording = useCallback(async () => {
     if (isRecording) return;
@@ -108,32 +118,29 @@ const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progr
     setIsProcessing(true);
     setError('');
     setCurrentPrediction(null);
+    setComparisonResult(null);
     setPredictionReady(false);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setAudioStream(stream);
-
       const recorder = recorderInstanceRef.current;
       await recorder.init(stream);
       await recorder.start();
-
       setIsRecording(true);
       setIsProcessing(false);
       setInfo('Recording in progress...');
-
       recordingTimerRef.current = setTimeout(stopRecording, RECORDING_TIME_LIMIT);
     } catch (err) {
-      console.error('Error starting recording:', err);
-      setError(err.message || 'Microphone access denied or failed to start.');
+      setError(err.message || 'Microphone access denied.');
       setIsProcessing(false);
       stopMicrophone();
     }
   }, [isRecording, stopRecording, stopMicrophone]);
 
   const handleRedoClick = () => { onRedo(); };
-  const handleCloseError = useCallback(() => { setError(''); }, []);
-  const handleCloseInfo = useCallback(() => { setInfo(''); }, []);
+  const handleCloseError = useCallback(() => setError(''), []);
+  const handleCloseInfo = useCallback(() => setInfo(''), []);
 
   useEffect(() => {
     return () => {
@@ -142,15 +149,15 @@ const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progr
     };
   }, [stopMicrophone]);
 
-  // ✅ Helper: render the prediction result box
-  const renderPredictionResult = () => {
+  // ── Single model prediction result ──
+  const renderSinglePrediction = () => {
     if (!predictionReady && !isPredicting) return null;
 
     if (isPredicting) {
       return (
         <Box sx={{ mt: 3, p: 2, borderRadius: 2, bgcolor: 'grey.100', textAlign: 'center' }}>
-          <HourglassEmptyIcon sx={{ fontSize: 32, color: 'text.secondary', mb: 1 }} />
-          <Typography variant="body1" color="textSecondary">
+          <HourglassEmptyIcon sx={{ fontSize: 32, color: 'text.secondary' }} />
+          <Typography variant="body1" color="textSecondary" sx={{ mt: 1 }}>
             Analysing with Whisper model...
           </Typography>
           <CircularProgress size={24} sx={{ mt: 1 }} />
@@ -158,39 +165,26 @@ const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progr
       );
     }
 
-    if (!currentPrediction) {
+    if (!currentPrediction?.prediction) {
       return (
         <Box sx={{ mt: 3, p: 2, borderRadius: 2, bgcolor: 'warning.light', textAlign: 'center' }}>
-          <Typography variant="body1" color="warning.contrastText">
-            Model prediction unavailable. Recording saved.
-          </Typography>
+          <Typography variant="body1">Model prediction unavailable. Recording saved.</Typography>
         </Box>
       );
     }
 
-    const isCorrect = currentPrediction.toUpperCase() === itemToRecord.toUpperCase();
-
+    const isCorrect = currentPrediction.isCorrect;
     return (
-      <Box
-        sx={{
-          mt: 3, p: 3, borderRadius: 2, textAlign: 'center',
-          bgcolor: isCorrect ? 'success.light' : 'error.light',
-          border: '2px solid',
-          borderColor: isCorrect ? 'success.main' : 'error.main',
-        }}
-      >
+      <Box sx={{
+        mt: 3, p: 3, borderRadius: 2, textAlign: 'center',
+        bgcolor: isCorrect ? 'success.light' : 'error.light',
+        border: '2px solid', borderColor: isCorrect ? 'success.main' : 'error.main',
+      }}>
         <Typography variant="overline" sx={{ color: isCorrect ? 'success.dark' : 'error.dark', fontWeight: 'bold' }}>
-          Whisper Model Heard
+          {currentPrediction.modelName} heard
         </Typography>
-        <Typography
-          variant="h2"
-          component="div"
-          sx={{
-            fontFamily: 'monospace', fontWeight: 'bold', my: 1,
-            color: isCorrect ? 'success.dark' : 'error.dark',
-          }}
-        >
-          {currentPrediction}
+        <Typography variant="h2" sx={{ fontFamily: 'monospace', fontWeight: 'bold', my: 1, color: isCorrect ? 'success.dark' : 'error.dark' }}>
+          {currentPrediction.prediction}
         </Typography>
         <Chip
           icon={isCorrect ? <CheckCircleIcon /> : <CancelIcon />}
@@ -203,18 +197,94 @@ const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progr
     );
   };
 
+  // ── Comparison mode result ──
+  const renderComparisonResult = () => {
+    if (!predictionReady && !isPredicting) return null;
+
+    if (isPredicting) {
+      return (
+        <Box sx={{ mt: 3, p: 2, borderRadius: 2, bgcolor: 'grey.100', textAlign: 'center' }}>
+          <HourglassEmptyIcon sx={{ fontSize: 32, color: 'text.secondary' }} />
+          <Typography variant="body1" color="textSecondary" sx={{ mt: 1 }}>
+            Running both models simultaneously...
+          </Typography>
+          <CircularProgress size={24} sx={{ mt: 1 }} />
+        </Box>
+      );
+    }
+
+    if (!comparisonResult) return null;
+
+    const { modelA, modelB } = comparisonResult;
+
+    const renderModelBox = (model, label, color) => {
+      if (!model) return null;
+      const isCorrect = model.isCorrect;
+      return (
+        <Box sx={{
+          p: 2, borderRadius: 2, textAlign: 'center',
+          bgcolor: isCorrect ? 'success.light' : 'error.light',
+          border: '2px solid', borderColor: isCorrect ? 'success.main' : 'error.main',
+          flex: 1,
+        }}>
+          <Chip label={label} color={color} size="small" sx={{ mb: 1, fontWeight: 'bold' }} />
+          <Typography variant="caption" display="block" color="textSecondary" noWrap>
+            {model.name}
+          </Typography>
+          <Typography variant="h3" sx={{ fontFamily: 'monospace', fontWeight: 'bold', my: 1, color: isCorrect ? 'success.dark' : 'error.dark' }}>
+            {model.prediction || '?'}
+          </Typography>
+          <Chip
+            icon={isCorrect ? <CheckCircleIcon /> : <CancelIcon />}
+            label={isCorrect ? 'Correct!' : `Expected: ${itemToRecord}`}
+            color={isCorrect ? 'success' : 'error'}
+            size="small"
+            variant="filled"
+          />
+        </Box>
+      );
+    };
+
+    return (
+      <Box sx={{ mt: 3 }}>
+        <Typography variant="overline" color="textSecondary" display="block" textAlign="center" sx={{ mb: 1 }}>
+          Model Comparison Results
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          {renderModelBox(modelA, 'Model A', 'primary')}
+          {renderModelBox(modelB, 'Model B', 'secondary')}
+        </Box>
+      </Box>
+    );
+  };
+
+  const isDisabled = isProcessing || isPredicting;
+
   return (
     <Container maxWidth="md" sx={{ mt: 4, mb: 6 }}>
       <Snackbar open={!!error} autoHideDuration={6000} onClose={handleCloseError} anchorOrigin={{ vertical: 'top', horizontal: 'center' }} sx={{ mt: 6 }}>
-        <Alert onClose={handleCloseError} severity="error" elevation={6} variant="filled" sx={{ width: '100%' }}>{error}</Alert>
+        <Alert onClose={handleCloseError} severity="error" elevation={6} variant="filled">{error}</Alert>
       </Snackbar>
       <Snackbar open={!!info} autoHideDuration={4000} onClose={handleCloseInfo} anchorOrigin={{ vertical: 'top', horizontal: 'center' }} sx={{ mt: 6 }}>
-        <Alert onClose={handleCloseInfo} severity="info" elevation={6} variant="filled" sx={{ width: '100%' }}>{info}</Alert>
+        <Alert onClose={handleCloseInfo} severity="info" elevation={6} variant="filled">{info}</Alert>
       </Snackbar>
 
+      {/* ── Model Manager Panel ── */}
+      <ModelManager
+        onModelChange={(model) => setInfo(`Now using: ${model.name}`)}
+        compareMode={compareMode}
+        onCompareModeChange={setCompareMode}
+        compareModelIds={compareModelIds}
+        onCompareModelChange={(slot, modelId) => setCompareModelIds(prev => ({ ...prev, [slot]: modelId }))}
+      />
+
+      {/* ── Recording Panel ── */}
       <Paper elevation={3} sx={{ p: { xs: 2, md: 4 }, mb: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h5" component="h1" sx={{ fontWeight: 'medium' }}>Voice to Text</Typography>
+          <Typography variant="h5" component="h1" sx={{ fontWeight: 'medium' }}>
+            {compareMode ? 'Voice to Text — Comparison Mode' : 'Voice to Text'}
+          </Typography>
+          {compareMode && <Chip label="COMPARE MODE" color="secondary" size="small" />}
         </Box>
         <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>Student ID: {studentId}</Typography>
         <Divider />
@@ -227,21 +297,15 @@ const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progr
             </Box>
           ) : (
             <>
-              {/* The letter/word to say */}
-              <Typography
-                variant="h1"
-                component="div"
-                sx={{ fontSize: { xs: '4rem', sm: '6rem' }, fontWeight: 'bold', color: 'primary.main', fontFamily: 'monospace' }}
-              >
+              <Typography variant="h1" component="div" sx={{ fontSize: { xs: '4rem', sm: '6rem' }, fontWeight: 'bold', color: 'primary.main', fontFamily: 'monospace' }}>
                 {itemToRecord}
               </Typography>
 
-              {/* Mic button */}
               <Box sx={{ mt: 3 }}>
                 <IconButton
                   onClick={isRecording ? stopRecording : startRecording}
                   color={isRecording ? 'error' : 'primary'}
-                  disabled={isProcessing || isPredicting}
+                  disabled={isDisabled}
                   sx={{ width: 80, height: 80, border: '2px solid' }}
                 >
                   {isRecording ? <MicOffIcon sx={{ fontSize: 40 }} /> : <MicIcon sx={{ fontSize: 40 }} />}
@@ -251,8 +315,8 @@ const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progr
                 </Typography>
               </Box>
 
-              {/* ✅ Prediction result shown here */}
-              {renderPredictionResult()}
+              {/* Prediction results */}
+              {compareMode ? renderComparisonResult() : renderSinglePrediction()}
             </>
           )}
         </Box>
@@ -264,11 +328,11 @@ const RecordingScreen = ({ studentId, itemToRecord, currentRun, totalRuns, progr
         </Box>
       </Paper>
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-start', flexWrap: 'wrap', gap: 2, mb: 4 }}>
+      <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
         <Button
           variant="outlined"
           onClick={handleRedoClick}
-          disabled={isRecording || isProcessing || isPredicting || (currentRun === 1 && itemToRecord === 'A')}
+          disabled={isDisabled || isRecording || (currentRun === 1 && itemToRecord === 'A')}
           startIcon={<ReplayIcon />}
           size="large"
         >
