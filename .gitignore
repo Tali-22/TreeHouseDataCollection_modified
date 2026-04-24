@@ -1,3 +1,4 @@
 *.safetensors
 *.pt
 checkpoint-*/
+.DS_Store
