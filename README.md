@@ -1,108 +1,121 @@
 # TreeHouseDataCollection_modified
 
-This is a modified version of the voice-recorder-app to make user-friendly live testing of all the upcoming versions of voice recognition models. To set up first, make sure to install the previous whisper models. To use this interface and help with any initial user queries, refer to the report for detailed instructions and information.
+This is a modified version of the voice-recorder-app to make user-friendly live testing of all the upcoming versions of voice recognition models. To use this interface and help with any initial user queries, refer to the report for detailed instructions and information.
 
 ---
 
 ## Prerequisites
 
-* Node.js (v14 or later)
-* npm (v6 or later)
-* Python 3.12 (via Anaconda recommended)
+* Anaconda (already installed)
+* Node.js (v14 or later) + npm (v6 or later)
 * Modern web browser with microphone access
-* The trained Whisper model folder (`whisper_cmd_az`) downloaded to `~/Downloads/`
+* Homebrew (for ffmpeg — see setup below)
 
 ---
 
-## Python Setup
+## One-Time Setup (Fresh Mac with Anaconda)
 
-Install the required Python packages using Anaconda:
-
-```bash
-conda install pytorch torchaudio -c pytorch
-pip install transformers
-```
-
----
-
-## Getting Started
+Run these steps once. After that, `npm start` is all you ever need.
 
 ### 1. Clone the repository
 
 ```bash
 git clone https://github.com/Tali-22/TreeHouseDataCollection_modified.git
-cd "/Users/**YOUR USER**/TreeHouseDataCollection_modified/voice-to-text-app"
+cd "TreeHouseDataCollection_modified/voice-to-text-app"
 ```
 
-### 2. Install dependencies
+### 2. Install Node dependencies
 
 ```bash
 npm install
 ```
 
-### 3. Download the Whisper model
-
-You will need the trained Whisper model files. Contact the project owner to get access. Once downloaded, place the unzipped folder at:
-
-```
-~/Downloads/whisper_cmd_az/
-```
-
-The folder should contain files like `config.json`, `model.safetensors`, `tokenizer.json` etc.
-
-### 4. Start the development servers
+### 3. Install Python dependencies
 
 ```bash
-# Terminal 1 — start model server with whichever model they want to start with
-python model_server.py /path/to/any/model_folder
-```
-This will start:
-* The model server loads one model at startup to minimise the time taken for models to process each recording in real-time
-* When you switch models in the GUI, it automatically calls /switch_model on the server to hot-swap to the new one — so you don't need to restart the server every time you switch
-
-```bash
-# Terminal 2 - Start the development server
-npm run dev
+/opt/anaconda3/bin/pip install flask
+/opt/anaconda3/bin/pip install soundfile
+/opt/anaconda3/bin/pip install librosa
+/opt/anaconda3/bin/pip install transformers
+/opt/anaconda3/bin/pip install torch torchaudio
+/opt/anaconda3/bin/pip install tensorflow
 ```
 
-This will start:
+> **Note:** If you are only using one model type, you can skip irrelevant installs — e.g. skip `tensorflow` if only using Whisper, skip `torch` if only using Keras.
 
-* Frontend development server at: **http://localhost:3000**
-* Backend API server at: **http://localhost:3001**
+### 4. Install ffmpeg (required for audio conversion)
 
-Alternatively, run them separately:
+First check if Homebrew is installed:
 
 ```bash
-# Terminal 2 - Start the backend server
-npm run server
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 
-# Terminal 3 - Start the frontend
+Then install ffmpeg:
+
+```bash
+brew install ffmpeg
+```
+
+### 5. Model Files
+
+The trained Whisper model files are included in this repository under `whisper_cmd_az/`. The folder contains:
+- `config.json`
+- `model.safetensors`
+- `tokenizer.json`
+- `generation_config.json`
+- `processor_config.json`
+- `tokenizer_config.json`
+- `training_args.bin`
+
+A second model (`my_voice_model`) is also included in the repository root for comparison testing.
+
+> **Note:** Checkpoint folders (`checkpoint-250`, `checkpoint-300`) are excluded from this repository as they exceed GitHub's file size limits. These are intermediate training snapshots and are not needed to run the app.
+
+---
+
+## Running the App
+
+```bash
 npm start
 ```
+
+This single command starts everything automatically:
+* The Python model server (loads the model into memory once at startup)
+* Frontend at: **http://localhost:3000**
+* Backend API at: **http://localhost:3001**
+
+> The model server is designed to keep the model cached in memory — so switching models in the GUI hot-swaps to the new one instantly without restarting the server.
 
 ---
 
 ## File Structure
 
 ```
-voice-to-text-app/
-├── public/                       # Static files
-├── server/                       # Backend server code
-│   └── index.js                  # Express server with upload, predict, and model management endpoints
-├── src/                          # Frontend source code
-│   ├── components/               # React components
-│   │   ├── Home.js               # Landing page with student ID input
-│   │   ├── RecordingScreen.js    # Recording + prediction display
-│   │   ├── ModelManager.js       # Model switching, comparison, and history panel
-│   │   └── CompletionScreen.js   # Session complete screen
-│   ├── services/                 # API services
-│   │   └── recordingService.js   # All API calls including model management
-│   ├── App.js                    # Main application component
-│   └── index.js                  # Application entry point
-├── predict.py                    # Python script that runs Whisper inference
-├── uploads/                      # Saved audio recordings (auto-created)
-├── package.json                  # Project dependencies and scripts
-└── README.md                     # This file
+TreeHouseDataCollection_modified/
+├── whisper_cmd_az/               # Fine-tuned Whisper model files
+├── my_voice_model/               # Additional voice model for comparison
+├── voice-to-text-app/            # Main application
+│   ├── public/                   # Static files
+│   ├── server/                   # Backend server code
+│   │   └── index.js              # Express server with upload, predict, and model management endpoints
+│   ├── src/                      # Frontend source code
+│   │   ├── components/           # React components
+│   │   │   ├── Home.js           # Landing page with student ID input
+│   │   │   ├── RecordingScreen.js# Recording + prediction display
+│   │   │   ├── LiveTestScreen.js # Audio preprocessing before sending to model
+│   │   │   ├── ModelManager.js   # Model switching, comparison, and history panel
+│   │   │   └── CompletionScreen.js # Session complete screen
+│   │   ├── services/             # API services
+│   │   │   └── recordingService.js # All API calls including model management
+│   │   ├── App.js                # Main application component
+│   │   └── index.js              # Application entry point
+│   ├── model_server.py           # Persistent Python server — loads model once, serves all predictions
+│   ├── predict.py                # Python script that runs Whisper inference
+│   ├── uploads/                  # Saved audio recordings (auto-created)
+│   ├── package.json              # Project dependencies and scripts
+│   └── README.md                 # This file
+└── Talitha Kummarikunta_UROP Report_iVESA.pdf  # Project report
 ```
 
 ---
@@ -161,36 +174,30 @@ In the **Models** tab of the Model Testing Panel:
 
 ## Built-in Models
 
-Two models are included by default:
+Two models are included in this repository:
+
+| Model | Location | Description |
+|---|---|---|
+| `whisper_cmd_az` | `/whisper_cmd_az/` | Custom trained model on Singaporean children's voices |
+| `my_voice_model` | `/my_voice_model/` | Additional voice model for comparison testing |
+
+A baseline model is also available via HuggingFace:
 
 | Model | Description |
 |---|---|
-| `whisper-singaporean-kids (Fine-tuned)` | Custom trained model on Singaporean children's voices |
 | `openai/whisper-tiny (Base)` | The original base Whisper model — useful as a baseline comparison |
 
 ---
 
 ## File Naming Convention
 
-Recordings are saved in the `uploads/` folder with this pattern:
-
-```
-{studentId}_{runNumber}{letterOrWord}.webm
-```
-
-If successful detection of recording by the model, another file is saved with the same pattern:
+Recordings are saved in the `uploads/` folder as `.wav` files:
 
 ```
 {studentId}_{runNumber}{letterOrWord}.wav
 ```
 
-Example: Student ID `001` recording the letter `A`:
-
-```
-001_1A.webm
-```
-
-Successful upload into training model will upload the following file:
+Example: Student ID `001` recording the letter `A` on run 1:
 
 ```
 001_1A.wav
@@ -203,7 +210,7 @@ Successful upload into training model will upload the following file:
 The model directory and Python path can be customised in `server/index.js`:
 
 ```
-WHISPER_MODEL_DIR   Path to your whisper_cmd_az folder (default: ~/Downloads/whisper_cmd_az)
+WHISPER_MODEL_DIR   Path to your model folder (default: ../whisper_cmd_az relative to repo root)
 PYTHON_CMD          Python executable to use (default: /opt/anaconda3/bin/python3)
 PREDICT_SCRIPT      Path to predict.py (default: project root)
 ```
