@@ -1,0 +1,7 @@
+{
+  "feature_type": "mfcc",
+  "target_sr": 16000,
+  "n_mfcc": 20,
+  "max_length": 73344,
+  "denoise": false
+}
